@@ -16,5 +16,5 @@ def check_firmware():
         print("Updated to the latest version! Rebooting...")
         machine.reset()
     else:
-        print("Firmware is up to date"!)
+        print("Firmware is up to date!")
 
