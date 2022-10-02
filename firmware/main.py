@@ -7,6 +7,7 @@ import urequests
 
 import config
 
+VERSION = "1.0.0"
 
 def show_error(power_pin):
     led1 = machine.Pin(config.LED_PIN_1, machine.Pin.OUT)
@@ -59,6 +60,7 @@ def device_id():
 
 
 def run():
+    print("Version", VERSION)
     import wlan
     import ota
 
