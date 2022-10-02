@@ -33,13 +33,13 @@ def get_temperature_and_humidity():
     return temperature, dht11.humidity()
 
 
-def log_data(temperature, humidity):
+def log_data(hex_device_id, temperature, humidity):
     print("Invoking log webhook")
     response = urequests.post(
         config.WEBHOOK_URL,
         headers={
             "content-type": "application/json",
-            "snow-device-mac": machine.unique_id(),
+            "snow-device-mac": hex_device_id,
         },
         json={"temperature": temperature, "humidity": humidity},
     )
@@ -48,13 +48,20 @@ def log_data(temperature, humidity):
         print("Webhook invoked")
     else:
         print("Webhook failed")
-        raise RuntimeError("Webhook failed")
+        raise RuntimeError("Webhook failed. Status Code", response.status_code)
+
+
+def device_id():
+    import binascii
+
+    return str(binascii.hexlify(machine.unique_id()))
 
 
 def run():
     import wlan
     import ota
 
+    hex_device_id = device_id()
     power_pin = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
     power_pin.on()
 
@@ -75,7 +82,7 @@ def run():
                     temperature=temperature, humidity=humidity
                 )
             )
-            log_data(temperature, humidity)
+            log_data(hex_device_id, temperature, humidity)
         except Exception as exc:
             sys.print_exception(exc)
             show_error(power_pin)

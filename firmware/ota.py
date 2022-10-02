@@ -15,3 +15,6 @@ def check_firmware():
     if OTA.update():
         print("Updated to the latest version! Rebooting...")
         machine.reset()
+    else:
+        print("Firmware is up to date"!)
+
