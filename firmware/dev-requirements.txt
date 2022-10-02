@@ -1,0 +1,4 @@
+micropy-cli
+adafruit-ampy
+esptool
+rshell
