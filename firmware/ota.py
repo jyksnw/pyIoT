@@ -3,10 +3,6 @@ import machine
 
 def check_firmware():
     print("Checking firmware for updates")
-
-    # Install Senko from PyPi
-    upip.install("micropython-senko")
-
     import senko
 
     OTA = senko.Senko(
