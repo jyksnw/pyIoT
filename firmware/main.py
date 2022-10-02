@@ -1,5 +1,7 @@
 import sys
 import time
+
+from sqlalchemy import false
 import dht
 import machine
 import urequests
@@ -61,6 +63,7 @@ def run():
     import wlan
     import ota
 
+    first_pass = True
     hex_device_id = device_id()
     power_pin = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
     power_pin.on()
@@ -74,7 +77,12 @@ def run():
     while True:
         try:
             wlan.connect_wlan(config.WIFI_SSID, config.WIFI_PASSWORD)
-            ota.check_firmware()
+            
+            # Only check for firmware on subsequent runs since boot will check
+            if not first_pass:
+                ota.check_firmware()
+            else:
+                first_pass = false
 
             temperature, humidity = get_temperature_and_humidity()
             print(
