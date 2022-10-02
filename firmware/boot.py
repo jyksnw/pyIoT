@@ -13,7 +13,8 @@ def main():
 
     import wlan
 
-    wlan.connect_wlan()
+    import config
+    wlan.connect_wlan(config.WIFI_SSID, config.WIFI_PASSWORD)
 
     import ota
 
