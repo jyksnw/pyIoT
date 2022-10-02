@@ -1,7 +1,6 @@
 import sys
 import time
 
-from sqlalchemy import false
 import dht
 import machine
 import urequests
@@ -82,7 +81,7 @@ def run():
             if not first_pass:
                 ota.check_firmware()
             else:
-                first_pass = false
+                first_pass = False
 
             temperature, humidity = get_temperature_and_humidity()
             print(
