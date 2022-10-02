@@ -8,6 +8,7 @@ def check_firmware():
     OTA = senko.Senko(
         user="jyksnw",
         repo="pyIoT",
+        branch="main",
         working_dir="firmware",
         files=["ota.py", "wlan.py", "boot.py", "main.py"],
     )
