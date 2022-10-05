@@ -1,3 +1,0 @@
-[submodule "firmware/senko"]
-	path = firmware/senko
-	url = git@github.com:RangerDigital/senko.git
