@@ -22,14 +22,23 @@ REQUEST_HEADERS = {
 
 def wifi_connect():
     """Connect to the configured Wi-Fi network."""
+    led = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.isconnected():
         print("connecting to network...")
+        led.on()
         sta_if.active(True)
         sta_if.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+
+        connect_attempt = 0
         while not sta_if.isconnected():
+            connect_attempt += 1
             time.sleep(1)
+            if connect_attempt >= 30:
+                raise RuntimeError("Failed to connect to WiFi")
+
     print("network config:", sta_if.ifconfig())
+    led.off()
 
 
 def get_current_time():
@@ -42,10 +51,15 @@ def get_current_time():
 
 def get_measurement():
     """Obtains the current sensor measurement and timestamps it"""
+    led = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
+    led.on()
+
     d = dht.DHT11(machine.Pin(config.DHT11_PIN))
     d.measure()
     temperature_c = d.temperature()
     temperature_f = temperature_c * 9 / 5 + 32
+
+    led.off()
     return {
         "timestamp": get_current_time(),
         "temperature": {
@@ -81,49 +95,51 @@ def show_error():
     occurred.
     """
     led = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
-    for i in range(5):
-        time.sleep(0.5)
+    led.off()
+
+    for i in range(10):
+        time.sleep(0.25)
         led.on()
         time.sleep(0.5)
         led.off()
-    led.on()
 
 
-def deep_sleep():
-    """Put the ESP8266 board into deep sleep mode for the configured length
-    of time.
-    At the end of the deep sleep period the board will reboot.
-    """
-    rtc = machine.RTC()
-    rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
-    rtc.alarm(rtc.ALARM0, config.INTERVAL * 1000)
-    machine.deepsleep()
+def machine_sleep():
+    """Sleep the device for the configure time limit"""
+    print("Sleeping for {} seconds".format(config.INTERVAL))
+    time.sleep(config.INTERVAL)
 
 
 def run():
     import sys
 
-    try:
-        wifi_connect()
+    running = True
 
-        prime_measurement_sensor()
-        measurement = get_measurement()
-        print(
-            "[{}] TempC = {}C, TempF = {}F, Humidity = {}%".format(
-                measurement["timestamp"],
-                measurement["temperature"]["celsius"],
-                measurement["temperature"]["fahrenheit"],
-                measurement["humidity"],
+    while running:
+        try:
+            wifi_connect()
+
+            prime_measurement_sensor()
+            measurement = get_measurement()
+            print(
+                "[{}] TempC = {}C, TempF = {}F, Humidity = {}%".format(
+                    measurement["timestamp"],
+                    measurement["temperature"]["celsius"],
+                    measurement["temperature"]["fahrenheit"],
+                    measurement["humidity"],
+                )
             )
-        )
 
-        send_measurement(measurement)
-    except Exception as ex:
-        sys.print_exception(ex)
-        show_error()
+            send_measurement(measurement)
+        except Exception as ex:
+            running = False
+            sys.print_exception(ex)
+            show_error()
 
-    if config.DEPLOYED:
-        deep_sleep()
+        if config.DEPLOYED:
+            machine_sleep()
+        else:
+            running = False
 
 
 run()
