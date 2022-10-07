@@ -1,108 +1,119 @@
-import sys
-import time
-
 import dht
 import machine
-import urequests
+import network
+import utime as time
+import urequests as requests
 
 import config
 
-VERSION = "1.0.0"
-
-def show_error(power_pin):
-    led1 = machine.Pin(config.LED_PIN_1, machine.Pin.OUT)
-    led2 = machine.Pin(config.LED_PIN_2, machine.Pin.OUT)
-    for _ in range(5):
-        power_pin.off()
-        led1.on()
-        led2.off()
-        time.sleep(0.5)
-        power_pin.on()
-        led1.off()
-        led2.on()
-        time.sleep(0.5)
-    led1.on()
-    led2.on()
-
-
-def get_temperature_and_humidity():
-    time.sleep(1)
-    dht11 = dht.DHT11(machine.Pin(config.DHT11_PIN))
-    dht11.measure()
-    temperature = dht11.temperature()
-    if config.FAHRENHEIT:
-        temperature = temperature * 9 / 5 + 32
-    return temperature, dht11.humidity()
-
-
-def log_data(hex_device_id, temperature, humidity):
-    print("Invoking log webhook")
-    response = urequests.post(
-        config.WEBHOOK_URL,
-        headers={
-            "content-type": "application/json",
-            "snow-device-mac": hex_device_id,
-        },
-        json={"temperature": temperature, "humidity": humidity},
-    )
-
-    if response.status_code < 400:
-        print("Webhook invoked")
-    else:
-        print("Webhook failed")
-        raise RuntimeError("Webhook failed. Status Code", response.status_code)
-
-
-def device_id():
+def _device_id():
     import binascii
 
-    return str(binascii.hexlify(machine.unique_id()))
+    return binascii.hexlify(machine.unique_id()).decode('utf-8')
 
+DEVICE_ID = _device_id()
+REQUEST_HEADERS = {
+    "content-type": "application/json",
+    "snow-device-mac": DEVICE_ID,
+}
+
+def wifi_connect():
+    """Connect to the configured Wi-Fi network."""
+    sta_if = network.WLAN(network.STA_IF)
+    if not sta_if.isconnected():
+        print('connecting to network...')
+        sta_if.active(True)
+        sta_if.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+        while not sta_if.isconnected():
+            time.sleep(1)
+    print('network config:', sta_if.ifconfig())
+
+
+def get_current_time():
+    """Obtain the current Unix time."""
+    response = requests.get(
+        'http://worldtimeapi.org/api/timezone/Etc/UTC')
+    if response.status_code != 200:
+        raise RuntimeError('Cannot get current time!')
+    return response.json()['unixtime']
+
+
+def get_measurement():
+    """Obtains the current sensor measurement and timestamps it"""
+    d = dht.DHT11(machine.Pin(config.DHT11_PIN))
+    d.measure()
+    temperature_c = d.temperature()
+    temperature_f = temperature_c * 9 / 5 + 32
+    return {
+        'timestamp' : get_current_time(),
+        'temperature' : {
+            'celsius': temperature_c,
+            'fahrenheit': temperature_f,
+        },
+        'humidity': d.humidity(),
+    }
+
+def prime_measurement_sensor():
+    try:
+        _ = get_measurement()
+    except:
+        pass
+    finally:
+        time.sleep(1)
+
+def send_measurement(measurement: dict):
+    payload = {
+        'device_id': DEVICE_ID,
+        'measurement': measurement,
+    }
+    response = requests.post(
+        config.WEBHOOK_URL,
+        headers=REQUEST_HEADERS,
+        json=payload
+    )
+
+    if response.status_code >= 400:
+        raise RuntimeError('Cannot send measurement')
+
+
+def show_error():
+    """Blink the ESP8266 LED a few times to indicate that an error has
+    occurred.
+    """
+    led = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
+    for i in range(5):
+        time.sleep(0.5)
+        led.on()
+        time.sleep(0.5)
+        led.off()
+    led.on()
+
+def deep_sleep():
+    """Put the ESP8266 board into deep sleep mode for the configured length
+    of time.
+    At the end of the deep sleep period the board will reboot.
+    """
+    rtc = machine.RTC()
+    rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
+    rtc.alarm(rtc.ALARM0, config.INTERVAL * 1000)
+    machine.deepsleep()
 
 def run():
-    print("Version", VERSION)
-    import wlan
-    import ota
+    import sys
 
-    first_pass = True
-    hex_device_id = device_id()
-    power_pin = machine.Pin(config.LED_PIN_0, machine.Pin.OUT)
-    power_pin.on()
-
-    # Warm up the sensor
     try:
-        get_temperature_and_humidity()
-    except Exception as _:
-        pass
+        wifi_connect()
 
-    while True:
-        try:
-            wlan.connect_wlan(config.WIFI_SSID, config.WIFI_PASSWORD)
-            
-            # Only check for firmware on subsequent runs since boot will check
-            if not first_pass:
-                ota.check_firmware()
-            else:
-                first_pass = False
+        prime_measurement_sensor()
+        measurement = get_measurement()
+        print('[{}] TempC = {}C, TempF = {}F, Humidity = {}%'.format(measurement['timestamp'], measurement['temperature']['celsius'], measurement['temperature']['fahrenheit'], measurement['humidity']))
 
-            temperature, humidity = get_temperature_and_humidity()
-            print(
-                "Temperature = {temperature}, Humidity = {humidity}".format(
-                    temperature=temperature, humidity=humidity
-                )
-            )
-            log_data(hex_device_id, temperature, humidity)
-        except Exception as exc:
-            sys.print_exception(exc)
-            show_error(power_pin)
-            break
-        else:
-            print(
-                "Going into sleep for {seconds} seconds...".format(
-                    seconds=config.LOG_INTERVAL
-                )
-            )
-            time.sleep(config.LOG_INTERVAL)
+        send_measurement(measurement)
+    except Exception as ex:
+        sys.print_exception(ex)
+        show_error()
 
+    if config.DEPLOYED:
+        deep_sleep()
 
 run()
