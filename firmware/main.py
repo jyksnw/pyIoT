@@ -6,10 +6,12 @@ import urequests as requests
 
 import config
 
+
 def _device_id():
     import binascii
 
-    return binascii.hexlify(machine.unique_id()).decode('utf-8')
+    return binascii.hexlify(machine.unique_id()).decode("utf-8")
+
 
 DEVICE_ID = _device_id()
 REQUEST_HEADERS = {
@@ -17,25 +19,25 @@ REQUEST_HEADERS = {
     "snow-device-mac": DEVICE_ID,
 }
 
+
 def wifi_connect():
     """Connect to the configured Wi-Fi network."""
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.isconnected():
-        print('connecting to network...')
+        print("connecting to network...")
         sta_if.active(True)
         sta_if.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
         while not sta_if.isconnected():
             time.sleep(1)
-    print('network config:', sta_if.ifconfig())
+    print("network config:", sta_if.ifconfig())
 
 
 def get_current_time():
     """Obtain the current Unix time."""
-    response = requests.get(
-        'http://worldtimeapi.org/api/timezone/Etc/UTC')
+    response = requests.get("http://worldtimeapi.org/api/timezone/Etc/UTC")
     if response.status_code != 200:
-        raise RuntimeError('Cannot get current time!')
-    return response.json()['unixtime']
+        raise RuntimeError("Cannot get current time!")
+    return response.json()["unixtime"]
 
 
 def get_measurement():
@@ -45,13 +47,14 @@ def get_measurement():
     temperature_c = d.temperature()
     temperature_f = temperature_c * 9 / 5 + 32
     return {
-        'timestamp' : get_current_time(),
-        'temperature' : {
-            'celsius': temperature_c,
-            'fahrenheit': temperature_f,
+        "timestamp": get_current_time(),
+        "temperature": {
+            "celsius": temperature_c,
+            "fahrenheit": temperature_f,
         },
-        'humidity': d.humidity(),
+        "humidity": d.humidity(),
     }
+
 
 def prime_measurement_sensor():
     try:
@@ -61,19 +64,16 @@ def prime_measurement_sensor():
     finally:
         time.sleep(1)
 
+
 def send_measurement(measurement: dict):
     payload = {
-        'device_id': DEVICE_ID,
-        'measurement': measurement,
+        "device_id": DEVICE_ID,
+        "measurement": measurement,
     }
-    response = requests.post(
-        config.WEBHOOK_URL,
-        headers=REQUEST_HEADERS,
-        json=payload
-    )
+    response = requests.post(config.WEBHOOK_URL, headers=REQUEST_HEADERS, json=payload)
 
     if response.status_code >= 400:
-        raise RuntimeError('Cannot send measurement')
+        raise RuntimeError("Cannot send measurement")
 
 
 def show_error():
@@ -88,6 +88,7 @@ def show_error():
         led.off()
     led.on()
 
+
 def deep_sleep():
     """Put the ESP8266 board into deep sleep mode for the configured length
     of time.
@@ -98,6 +99,7 @@ def deep_sleep():
     rtc.alarm(rtc.ALARM0, config.INTERVAL * 1000)
     machine.deepsleep()
 
+
 def run():
     import sys
 
@@ -106,7 +108,14 @@ def run():
 
         prime_measurement_sensor()
         measurement = get_measurement()
-        print('[{}] TempC = {}C, TempF = {}F, Humidity = {}%'.format(measurement['timestamp'], measurement['temperature']['celsius'], measurement['temperature']['fahrenheit'], measurement['humidity']))
+        print(
+            "[{}] TempC = {}C, TempF = {}F, Humidity = {}%".format(
+                measurement["timestamp"],
+                measurement["temperature"]["celsius"],
+                measurement["temperature"]["fahrenheit"],
+                measurement["humidity"],
+            )
+        )
 
         send_measurement(measurement)
     except Exception as ex:
@@ -115,5 +124,6 @@ def run():
 
     if config.DEPLOYED:
         deep_sleep()
+
 
 run()
